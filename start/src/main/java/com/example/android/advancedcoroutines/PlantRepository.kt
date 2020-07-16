@@ -16,12 +16,15 @@
 
 package com.example.android.advancedcoroutines
 
+import androidx.annotation.AnyThread
 import androidx.lifecycle.liveData
 import androidx.lifecycle.map
+import androidx.lifecycle.switchMap
 import com.example.android.advancedcoroutines.util.CacheOnSuccess
 import com.example.android.advancedcoroutines.utils.ComparablePair
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * Repository module for handling data operations.
@@ -52,6 +55,12 @@ class PlantRepository private constructor(
         }
     }
 
+    @AnyThread
+    suspend fun List<Plant>.applyMainSafeSort(customSortOrder: List<String>) =
+        withContext(defaultDispatcher){
+            this@applyMainSafeSort.applySort(customSortOrder)
+        }
+
     /**
      * Fetch a list of [Plant]s from the database.
      * Returns a LiveData-wrapped List of Plants.
@@ -68,13 +77,13 @@ class PlantRepository private constructor(
      * Fetch a list of [Plant]s from the database that matches a given [GrowZone].
      * Returns a LiveData-wrapped List of Plants.
      */
-    fun getPlantsWithGrowZone(growZone: GrowZone) = liveData<List<Plant>> {
-        val plantsGrowZoneLiveData = plantDao.getPlantsWithGrowZoneNumber(growZone.number)
-        val customSortOrder = plantsListSortOrderCache.getOrAwait()
-        emitSource(plantsGrowZoneLiveData.map {
-            plantList -> plantList.applySort(customSortOrder)
-        })
-    }
+    fun getPlantsWithGrowZone(growZone: GrowZone) =
+        plantDao.getPlantsWithGrowZoneNumber(growZone.number).switchMap { plantList ->
+            liveData {
+                val customSortOrder = plantsListSortOrderCache.getOrAwait()
+                emit(plantList.applyMainSafeSort(customSortOrder))
+            }
+        }
 
     /**
      * Returns true if we should make a network request.
