@@ -16,11 +16,7 @@
 
 package com.example.android.advancedcoroutines
 
-import androidx.lifecycle.LiveData
-import androidx.lifecycle.MutableLiveData
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.switchMap
-import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.*
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
@@ -70,9 +66,19 @@ class PlantListViewModel internal constructor(
         }
     }
 
+    // Note: asLiveData() uses a timeout as the time between any ViewModel is looking at him and die.
+    // If a ViewModel isn't attached then Flow dies, if the ViewModel come back early the Flow remains.
+    //
+    // Note2: Flow is main-thread-safe so is not needed converting into LiveData in order to pass it
+    // to Fragment. But the codelab do it anyway.
+    val plantsUsingFlow : LiveData<List<Plant>> = plantRepository.plantsFlow.asLiveData()
+
     init {
-        // When creating a new ViewModel, clear the grow zone and perform any related udpates
+        // When creating a new ViewModel, clear the grow zone and perform any related updates
         clearGrowZoneNumber()
+
+        // fetch the full plant list
+        launchDataLoad { plantRepository.tryUpdateRecentPlantsCache() }
     }
 
     /**

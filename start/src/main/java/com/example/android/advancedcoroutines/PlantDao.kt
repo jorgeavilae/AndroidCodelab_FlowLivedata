@@ -21,6 +21,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import kotlinx.coroutines.flow.Flow
 
 /**
  * The Data Access Object for the Plant class.
@@ -35,4 +36,14 @@ interface PlantDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(plants: List<Plant>)
+
+    // Flow emits the whole List of Plant given by this query, without splitting it.
+    @Query("SELECT * FROM plants ORDER BY name")
+    fun getPlantsFlow(): Flow<List<Plant>>
+
+    // Note: Flow observe changes in table level.
+    // Changes in "plants WHERE growZoneNumber != :growZoneNumber" (not included in this query)
+    // will emit (same old) values anyway.
+    @Query("SELECT * FROM plants WHERE growZoneNumber = :growZoneNumber ORDER BY name")
+    fun getPlantsWithGrowZoneNumberFlow(growZoneNumber: Int): Flow<List<Plant>>
 }
