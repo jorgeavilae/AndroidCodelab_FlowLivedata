@@ -16,8 +16,12 @@
 
 package com.example.android.advancedcoroutines
 
+import android.content.res.Resources
 import androidx.lifecycle.*
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.ConflatedBroadcastChannel
+import kotlinx.coroutines.flow.asFlow
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.launch
 
 /**
@@ -66,12 +70,20 @@ class PlantListViewModel internal constructor(
         }
     }
 
+    private val growZoneChannel = ConflatedBroadcastChannel<GrowZone>()
+
     // Note: asLiveData() uses a timeout as the time between any ViewModel is looking at him and die.
     // If a ViewModel isn't attached then Flow dies, if the ViewModel come back early the Flow remains.
     //
     // Note2: Flow is main-thread-safe so is not needed converting into LiveData in order to pass it
     // to Fragment. But the codelab do it anyway.
-    val plantsUsingFlow : LiveData<List<Plant>> = plantRepository.plantsFlow.asLiveData()
+    val plantsUsingFlow : LiveData<List<Plant>> = growZoneChannel.asFlow()
+        .flatMapLatest { growZone ->
+            if (growZone == NoGrowZone)
+                plantRepository.plantsFlow
+            else
+                plantRepository.getPlantsWithGrowZoneFlow(growZone)
+        }.asLiveData()
 
     init {
         // When creating a new ViewModel, clear the grow zone and perform any related updates
@@ -89,9 +101,10 @@ class PlantListViewModel internal constructor(
      */
     fun setGrowZoneNumber(num: Int) {
         growZone.value = GrowZone(num)
+        growZoneChannel.offer(GrowZone(num))
 
         // initial code version, will move during flow rewrite
-        launchDataLoad { plantRepository.tryUpdateRecentPlantsCache() }
+        launchDataLoad { plantRepository.tryUpdateRecentPlantsForGrowZoneCache(GrowZone(num)) }
     }
 
     /**
@@ -102,6 +115,7 @@ class PlantListViewModel internal constructor(
      */
     fun clearGrowZoneNumber() {
         growZone.value = NoGrowZone
+        growZoneChannel.offer(NoGrowZone)
 
         // initial code version, will move during flow rewrite
         launchDataLoad { plantRepository.tryUpdateRecentPlantsCache() }
