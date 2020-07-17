@@ -22,10 +22,8 @@ import androidx.lifecycle.map
 import androidx.lifecycle.switchMap
 import com.example.android.advancedcoroutines.util.CacheOnSuccess
 import com.example.android.advancedcoroutines.utils.ComparablePair
-import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.*
 
 /**
  * Repository module for handling data operations.
@@ -88,9 +86,40 @@ class PlantRepository private constructor(
 
     val plantsFlow: Flow<List<Plant>>
         get() = plantDao.getPlantsFlow()
+            // When the result of customSortFlow is available,
+            // this will combine it with the latest value from
+            // the flow above.  Thus, as long as both `plants`
+            // and `sortOrder` are have an initial value (their
+            // flow has emitted at least one value), any change
+            // to either `plants` or `sortOrder`  will call
+            // `plants.applySort(sortOrder)`.
+            //
+            // We can combine the cached network lookup with our database query. Both of them
+            // will run on different coroutines concurrently.
+            .combine(customSortFlow) {
+                plantList, customSortOrder -> plantList.applySort(customSortOrder)
+            }
+            // The operator flowOn launches a new coroutine to collect the flow above
+            // it and introduces a buffer to write the results. Flow produces results
+            // faster than UI consumes it.
+            .flowOn(defaultDispatcher)
+            // You can control the buffer with more operators, such as conflate which says
+            // to store only the last value produced in the buffer.
+            .conflate()
 
     fun getPlantsWithGrowZoneFlow(growZone: GrowZone) : Flow<List<Plant>> =
         plantDao.getPlantsWithGrowZoneNumberFlow(growZone.number)
+
+    // Since this flow only emits a single value, you can also build it directly
+    // from the getOrAwait function using asFlow.
+    val customSortFlow = plantsListSortOrderCache::getOrAwait.asFlow()
+        // You can use onStart to run suspending code before a flow runs. It can even emit extra
+        // values into the flow, so you could use it to emit a Loading state on a network
+        // request flow.
+        //.onStart {
+        //    emit(listOf())
+        //    delay(1500)
+        //}
 
     /**
      * Returns true if we should make a network request.
