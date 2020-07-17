@@ -109,6 +109,11 @@ class PlantRepository private constructor(
 
     fun getPlantsWithGrowZoneFlow(growZone: GrowZone) : Flow<List<Plant>> =
         plantDao.getPlantsWithGrowZoneNumberFlow(growZone.number)
+            .map { plantList ->
+                val sortOrderFromNetwork = plantsListSortOrderCache.getOrAwait()
+                val nextValue = plantList.applyMainSafeSort(sortOrderFromNetwork)
+                nextValue
+            }
 
     // Since this flow only emits a single value, you can also build it directly
     // from the getOrAwait function using asFlow.
